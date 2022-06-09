@@ -823,6 +823,7 @@ CALL PROC_FJ(10);
 SELECT *
 FROM studinfo
 WHERE StudName LIKE '丽';
+
 #8.1-2
 SELECT *
 FROM studinfo
@@ -868,20 +869,106 @@ ON studinfo.StudNo=studscoreinfo.StudNo
 WHERE StudBirthDay IS NULL ;
 
 #8.7
-SELECT studinfo.StudNo,avg(studscore)
+SELECT studscoreinfo.StudNo,avg(studscore)
 FROM studscoreinfo INNER JOIN studinfo
 ON studscoreinfo.StudNo=studinfo.StudNo
-WHERE RIGHT(StudName,1) = '王' 
+WHERE LEFT(StudName,1) = '王' 
 GROUP BY StudNo
 HAVING 	avg(studscore)>	(
 		SELECT avg(studscore)
 		FROM studscoreinfo INNER JOIN studinfo
 		ON studscoreinfo.StudNo=studinfo.StudNo
-		WHERE RIGHT(StudName,1) = '李'
+		WHERE LEFT(StudName,1) = '李'
 		GROUP BY studinfo.StudNo
 		ORDER BY avg(studscore) DESC
 		LIMIT 1
 		);
+
+#8.8
+SELECT StudNo,StudGender,StudName,
+		CASE StudGender
+	WHEN '男' THEN 'Male'
+	WHEN '女' THEN 'Fsmale'
+	  ELSE 'NOt'
+END AS 学生性别
+FROM studinfo;
+
+#8.9
+SELECT StudNo,sum(studscore),max(studscore),min(studscore),count(*),
+	CASE WHEN(count(*)>20) 
+		THEN (sum(Studscore)-max(studscore)-min(studscore))/(count(*)-2)
+		ELSE avg(studscore)
+END AS 'avgscore'
+FROM studscoreinfo
+GROUP BY StudNo;
+
+#8.10
+SELECT StudNo,AVG(StudScore),
+	CASE WHEN AVG(StudScore) BETWEEN 90 and 100 THEN '优秀'
+		WHEN AVG(StudScore) BETWEEN 80 and 90 THEN '良好'
+		WHEN AVG(StudScore) BETWEEN 70 and 80 THEN '一般'
+		WHEN AVG(StudScore) BETWEEN 60 and 70 THEN '及格'
+		ELSE '不及格'
+END AS 成绩等级
+FROM studscoreinfo
+GROUP BY studno;
+
+#8.11
+#SET GLOBAL log_bin_trust_function_creators=1
+#DROP FUNCTION GetItemScore
+CREATE FUNCTION GetItemScore(Stand_Ans VARCHAR(10),Custor_Ans VARCHAR(10))
+RETURNS INT
+BEGIN
+		DECLARE i INT DEFAULT 1;
+		IF CHAR_LENGTH(Custor_Ans)>CHAR_LENGTH(Stand_Ans)
+			OR Custor_Ans IS NULL THEN
+			RETURN 0;
+		END IF;
+		WHILE i<=CHAR_LENGTH(Custor_Ans) DO
+			IF locate(SubString(Custor_Ans,i,1),Stand_Ans)<1
+				THEN RETURN i-1;
+			END IF;
+			SET i=i+1;
+		END WHILE;
+		RETURN CHAR_LENGTH(Custor_ans);
+END;
+#SELECT GetItemScore('AB','AC')
+
+#8.12
+SELECT StudNo,
+CAST(SUM(GetItemScore(Stand_Ans,Custor_Ans))*100/SUM(CHAR_LENGTH
+(Stand_Ans))
+as Decimal(3,1)) As StudScore
+FROM TestAnswer
+GROUP BY StudNo ORDER BY StudScore DESC
+
+#8.13
+CREATE VIEW V_GetStudScore
+AS
+SELECT StudNo,
+     CAST(SUM(GetItemScore(Stand_Ans,Custor_Ans))*100/SUM(CHAR_LENGTH(Stand_Ans))
+as Decimal(3,1)) As StudScore
+FROM TestAnswer
+GROUP BY StudNo 
+ORDER BY StudScore DESC;
+SELECT *
+from V_GetStudScore;
+
+#8.14
+UPDATE v_GetStudScore JOIN studscore
+ON v_GetStudScore.StudNo=studscore.StudNo
+SET studscore.StudScore=v_GetStudScore.StudScore;
+SELECT * FROM StudScore;
+
+#8.15
+CREATE TABLE Top20StudScore
+AS
+SELECT v_GetStudScore.StudNo,StudName,v_GetStudScore.StudScore
+FROM v_GetStudScore INNER JOIN studscore
+ON v_GetStudScore.StudNo=StudScore.StudNo
+ORDER BY studscore desc
+LIMIT 20;
+SELECT * FROM Top20StudScore;
 
 #############################################
 #9.1
