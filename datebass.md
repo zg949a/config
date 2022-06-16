@@ -972,41 +972,296 @@ SELECT * FROM Top20StudScore;
 
 #############################################
 #9.1
-CREATE PROCEDURE RrocGETA_Z
-BEGIN
-		DECLARE I INT DEFAULT 65;
-		DECLARE R VARCHAR(100);
-		WHILE I < 65+26 DO
-				IF R IS NULL THEN
-						SET R=CHAR(I);
-				ELSE
-						SET R=CONCAT_WS(',',R,CHAR(I));
-				END IF;
-				SET I=I+1;
-		END WHILE;
-		SELECT R;
-END;
-CALL ProcGETA_Z
-
-#实例
 DELIMITER //
- DROP PROCEDURE if exists P_Save_ClassInfo;
- Create Procedure P_Save_ClassInfo (in CID Varchar(10),in CName Varchar(50),in CDesc Varchar(100),out msg varchar(20))
-begin
-if Exists(Select * From ClassInfo Where ClassID=CID) then
-Update ClassInfo Set ClassName=CName,ClassDesc=CDesc
- Where ClassID=CID;
- set msg='修改成功';
- Else
- Insert Into ClassInfo(ClassID,ClassName,ClassDesc) Values (CID,CName,CDesc);
- set msg='添加成功';
- End if;
- End //
- DELIMITER ;
- call P_Save_ClassInfo('20181152','computer2018','good',@msg);
- select @msg;
- 
- select * from classinfo
- 
+DROP PROCEDURE IF EXISTS PROGETA_Z;
+CREATE PROCEDURE PROGETA_Z()
+BEGIN 
+		DECLARE I INT DEFAULT 65;
+		DECLARE K VARCHAR(100);
+		WHILE I<65+26 DO 
+			IF K IS NULL THEN 
+				SET K=CHAR(I);
+			ELSE 
+				SET K=CONCAT_WS(',',K,CHAR(I));
+			END IF;
+			SET I=I+1;
+		END WHILE;
+		SELECT K;
+END //;
+DELIMITER;
+CALL PROGETA_Z;
+
+#9.2
+delimiter $$
+DROP PROCEDURE IF EXISTS procSJ;
+CREATE PROCEDURE  procSJ()
+BEGIN
+		DECLARE n INT DEFAULT 1;
+		DECLARE s INT DEFAULT 1;
+		DECLARE i INT DEFAULT 1;
+		DECLARE k bigint default 1;
+    WHILE s < 10000 do
+        SET n=2*n+1;
+				WHILE i<n do
+						SET @k = @k * @i;
+						SET i=i+1;
+						SET s=s+i;
+				END WHILE;
+		END WHILE;
+		SELECT s;
+		SELECT n;
+END $$;
+delimiter;
+call procSJ;
+
+#9.3
+DELIMITER $$
+DROP PROCEDURE IF EXISTS CS;
+CREATE PROCEDURE CS(IN n INT,IN m INT)
+BEGIN 
+		SELECT studinfo.StudNo,studinfo.StudName,AVG(studscore),count(*)
+		FROM studinfo INNER JOIN studscoreinfo
+		ON studinfo.StudNo = studscoreinfo.StudNo
+		GROUP BY StudNo
+		HAVING AVG(studscore) BETWEEN n AND m;		
+END $$;
+DELIMITER;
+CALL CS(75,80);
+
+#9.4
+DELIMITER $$
+DROP PROCEDURE IF EXISTS InDOut;
+CREATE PROCEDURE InDout(IN N INT,IN M INT,OUT R INT)
+BEGIN
+		SELECT COUNT(*)
+		FROM (
+		SELECT studinfo.studno
+		FROM studinfo INNER JOIN studscoreinfo
+		ON studinfo.StudNo = studscoreinfo.StudNo
+		GROUP BY studscoreinfo.StudNo
+		HAVING AVG(studscore) BETWEEN n AND m)  as a;
+		SET R=count(*);
+END $$;
+delimiter;
+CALL indout(75,80,@R);
+		
+#9.5
+delimiter //
+DROP PROCEDURE IF EXISTS gkc_xs_tg;
+CREATE PROCEDURE gkc_xs_tg()
+BEGIN
+		SELECT s.StudNo,c.CourseType,s.StudName,COUNT(*),SUM(CourseCredit)
+		FROM courseinfo c,studinfo s,studscoreinfo sc
+		WHERE sc.StudNo=s.StudNo AND c.CourseID=sc.CourseID AND s.StudNo IN(
+				SELECT StudNo
+				FROM studinfo) 
+				AND c.CourseType in ('A','B','C','D11','D12') AND sc.StudScore>60
+				GROUP BY s.StudNo
+				ORDER BY s.StudName,c.CourseType;
+END //;
+delimiter;
+call gkc_xs_tg();
+
+#9.6 
+CREATE TRIGGER TrigStudInfo_DELETE
+AFTER DELETE ON StudInfo
+FOR EACH ROW
+BEGIN 
+		UPDATE STUDSCOREINFO SI 
+		SET SI.STUDNO=STUDNO-1
+		WHERE SI.COURSEID=old.COURSEID 
+		AND SI.STUDSCORE=OLD.STUDSCORE;
+END;
+
+#9.7
+CREATE TRIGGER TrigStudInfo_UPDATE 
+AFTER INSERT ON StudInfo
+FOR EACH ROW
+BEGIN 
+UPDATE STUDSCOREINFO SI 
+SET SI.STUDNO=STUDNO+1
+WHERE SI.COURSEID=NEW.COURSEID 
+AND SI.STUDSCORE=NEW.STUDSCORE;
+END;
+
+#9.8
+#DROP TRIGGER TrigCourseInfo_UPDATE
+CREATE TRIGGER TrigCourseInfo_UPDATE
+BEFORE UPDATE ON CourseInfo
+FOR EACH ROW
+BEGIN
+		DECLARE msg varchar(200);
+		IF((SELECT s.StudNo 
+				FROM studscoreinfo s,courseinfo c 
+				WHERE c.CourseID=s.CourseID AND c.CourseID=old.CourseID) is not NULL)
+				THEN SET msg='error:该课程下有学生成绩信息';
+				SIGNAL SQLSTATE 'HY000' SET message_text=msg;
+		END IF;
+END;
+
+#9.9
+delimiter //
+DROP PROCEDURE IF EXISTS P_GetStud_same_Quene;
+CREATE PROCEDURE P_GetStud_same_Quene() 
+BEGIN 
+		DECLARE SNo VARCHAR(20); 
+		DECLARE SName VARCHAR(20); 
+		DECLARE i INT DEFAULT 1; 
+		DECLARE j INT DEFAULT 1; 
+		DECLARE Avg_Score DECIMAL(4,1); 
+		DECLARE prev_j INT DEFAULT 1; 
+		DECLARE prev_score DECIMAL(4,1); 
+		DECLARE have INT DEFAULT 1; 
+		DECLARE Cur_StudQuene Cursor For Select StudNo,StudName,AvgScore From V_StudAvgScore Order By AvgScore DESC; 
+		DECLARE exit handler for NOT FOUND SET have:= 0;
+		OPEN Cur_StudQuene; 
+		REPEAT 
+		Fetch Cur_StudQuene INTO SNO,SName,Avg_Score; 
+		IF avg_score=prev_score THEN 
+				SET j=prev_j; 
+		ELSE 
+				SET j=i; 
+		END IF; 
+		SELECT SNO,SName,Avg_Score,j; 
+		SET prev_j=j; 
+		prev_score=avg_score; 
+		SET i=i+1; 
+		UNTIL have = 0 end repeat; 
+		CLOSE Cur_StudQuene; 
+END;
+call P_GetStud_same_Quene;
+
+#9.10 导出学生平均分成绩（保留 1 位小数），使用 Excel
  ################################
  #14.1
+Drop Table studinfo2
+CREATE TABLE StudInfo2(
+	StudNo VARCHAR(15) PRIMARY KEY COMMENT '学号',
+	StudName VARCHAR(20) NOT NULL COMMENT '姓名',
+	StudSex CHAR(2) NOT NULL COMMENT '性别',
+		CHECK (StudSex IN ('男','女')),
+	StudBirthDay DATE NULL COMMENT '生日',
+	ClassName VARCHAR(50) NOT NULL COMMENT '班级名称'
+);
+ 
+CREATE TABLE TypeInfo(
+	TypeID VARCHAR(10) PRIMARY KEY COMMENT '打字类型号',
+	TypeName VARCHAR(50) NOT NULL COMMENT '打字类型名称',
+	TypeDesc VARCHAR(100) NULL COMMENT '打字描述'
+);
+
+CREATE TABLE StudScore2(
+	StudNo VARCHAR(15) PRIMARY KEY COMMENT '学号',
+	TypeID VARCHAR(10) NOT NULL COMMENT '打字类型号',
+	StudScore DECIMAL(4,1) NULL 	CHECK(studScore >= 0 AND studscore <=100) COMMENT '学生成绩',
+	CONSTRAINT FOREIGN KEY(StudNo)
+		REFERENCES studinfo2(StudNo),
+	CONSTRAINT FOREIGN KEY(TypeID)
+		REFERENCES TypeInfo(TypeID)
+);
+
+#14.2
+
+#14.3
+CREATE VIEW viewStudCourseScore
+AS
+SELECT studinfo2.studno,studinfo2.studname,studinfo2.studsex,studinfo2.ClassName,typeinfo.TypeID,typeinfo.TypeName,StudScore
+FROM studinfo2 INNER JOIN typeinfo INNER JOIN studscore2
+ON studinfo2.studNo = studscore2.studNo AND typeinfo.TypeID = studscore2.TypeID;
+SELECT * FROM viewStudCourseScore;
+
+#14.4
+INSERT INTO studinfo2 VALUES('20190704070','李明','男','2001-10-3','Computer');
+INSERT INTO typeinfo VALUES('C0101','中文','中文输入');
+INSERT INTO studscore2 VALUES('20190704070','C0101','70.5');
+
+#14.5
+UPDATE studscore2
+SET studscore = '75'
+WHERE StudNo = '20190704070';
+
+#14.6
+DELETE FROM typeinfo
+WHERE typeID='C0101'; 
+
+#14.7
+SELECT *
+FROM studscore2 
+WHERE typeID='C0101'
+GROUP BY STUDNO
+ORDER BY STUDSCORE DESC;
+
+#14.8
+SELECT SUM(studscore)
+FROM studscore2
+GROUP BY studNo;
+
+#14.9
+SELECT AVG(studscore)
+FROM studscore2
+GROUP BY StudNo
+HAVING AVG(studscore) >= 85;
+
+#14.10
+DROP TABLE StudInfoBack
+CREATE TABLE StudInfoBack
+AS
+SELECT studinfo2.StudNo,studinfo2.StudName,studinfo2.ClassName,AVG(studscore)
+FROM studscore2 INNER JOIN studinfo2
+ON studinfo2.StudNo = studscore2.StudNo
+GROUP BY StudNo
+ORDER BY AVG(StudScore) DESC
+LIMIT 1,30;
+
+#14.11
+SELECT typeinfo.TypeID,TypeName,AVG(studscore),COUNT(*),MAX(studscore),MIN(studscore)
+FROM studscore2 INNER JOIN typeinfo
+ON typeinfo.TypeID = studscore2.TypeID
+GROUP BY StudNo;
+
+#14.12-1
+SELECT studinfo2.StudNo,studinfo2.StudName,studinfo2.ClassName,studinfo2.StudSex,AVG(studscore)
+FROM studinfo2 INNER JOIN studscore2
+ON studinfo2.StudNo = studscore2.StudNo
+GROUP BY studscore2.StudNo
+HAVING AVG(StudScore) >= 85;
+#14.12-2
+SELECT studno,studname,studsex,classname
+FROM studinfo2
+WHERE StudNo IN(
+		SELECT StudNo
+		FROM studscore2
+		GROUP BY StudNo
+		HAVING AVG(StudScore) >= 85
+		);
+
+#14.13
+SELECT COUNT(*),AVG(studscore)
+FROM studscore2 INNER JOIN studinfo2
+ON studinfo2.StudNo = studscore2.StudNo
+GROUP BY StudSex;
+
+#14.14
+CREATE VIEW V_STUDAVGSCORE 
+AS
+SELECT S.STUDNO,STUDNAME,
+CAST(AVG(STUDSCORE) AS DECIMAL(4,1)) AS AVGSCORE
+FROM studinfo2 S,studscore2 SI 
+WHERE S.STUDNO=SI.STUDNO
+GROUP BY S.studno;
+
+CREATE PROCEDURE P_CY()
+BEGIN
+DECLARE SNO VARCHAR(15);
+DECLARE SNAM VARCHAR(20);
+DECLARE AVG_SCORE DECIMAL(4,1);
+DECLARE HAVE INT DEFAULT 1;
+DECLARE CY CURSOR FOR SELECT STUDNO,STUDNAME,AVGSCORE FROM V_STUDAVGSCORE
+ORDER BY AVGSCORE DESC;
+DECLARE EXIT HANDLER FOR NOT FOUND SET HAVE:=0;
+OPEN CY; 
+REPEAT 
+FETCH CY INTO SNO,SNAM,AVG_SCORE;
+UNTIL HAVE = 0 END REPEAT;
+CLOSE CY;
+END;
